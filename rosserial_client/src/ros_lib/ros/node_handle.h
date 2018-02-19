@@ -91,7 +91,7 @@ const uint8_t MODE_MESSAGE        = 7;
 const uint8_t MODE_MSG_CHECKSUM   = 8;    // checksum for msg and topic id
 
 
-const uint8_t SERIAL_MSG_TIMEOUT_SECONDS  = 0.02;   // 20 milliseconds to recieve all of message data
+const uint8_t SERIAL_MSG_TIMEOUT  = 20;   // 20 milliseconds to recieve all of message data
 
 using rosserial_msgs::TopicInfo;
 
@@ -198,7 +198,7 @@ protected:
 
   bool configured_;
 
-  /* used for syncing the time */
+  /* used for syncing the time in micros */
   uint64_t last_sync_time;
   uint64_t last_sync_receive_time;
   uint64_t last_msg_timeout_time;
@@ -212,7 +212,7 @@ public:
   virtual int spinOnce()
   {
     /* restart if timed out */
-    uint64_t c_time = hardware_.time();
+    uint64_t c_time = hardware_.time_micros();
     if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 1000 * 2200)) // TODO(floriantschopp): why 2200?
     {
       configured_ = false;
@@ -259,7 +259,7 @@ public:
         if (data == 0xff)
         {
           mode_++;
-          last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT_SECONDS * 1000000;
+          last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT * 1000;
         }
         else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000 * 1000))
         {
@@ -373,25 +373,25 @@ public:
   {
     std_msgs::Time t;
     publish(TopicInfo::ID_TIME, &t);
-    rt_time = hardware_.time();
+    rt_time = hardware_.time_micros();
   }
 
   void syncTime(uint8_t * data)
   {
     std_msgs::Time t;
-    uint64_t offset = hardware_.time() - rt_time;
+    uint64_t offset = hardware_.time_micros() - rt_time;
 
     t.deserialize(data);
     t.data.sec += offset / 1000;
     t.data.nsec += (offset % 1000) * 1000000UL;
 
     this->setNow(t.data);
-    last_sync_receive_time = hardware_.time();
+    last_sync_receive_time = hardware_.time_micros();
   }
 
   Time now()
   {
-    uint64_t mus = hardware_.time();
+    uint64_t mus = hardware_.time_micros();
     Time current_time;
     current_time.sec = mus / 1000000 + sec_offset;
     current_time.nsec = (mus % 1000000) * 1000000UL + nsec_offset;
@@ -401,7 +401,7 @@ public:
 
   void setNow(Time & new_now)
   {
-    uint32_t mus = hardware_.time();
+    uint32_t mus = hardware_.time_micros();
     sec_offset = new_now.sec - mus / 1000000 - 1;
     nsec_offset = new_now.nsec - (mus % 1000000) * 1000000UL + 1000000000UL;
     normalizeSecNSec(sec_offset, nsec_offset);
