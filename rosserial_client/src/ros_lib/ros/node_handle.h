@@ -68,7 +68,7 @@ const int SPIN_OK = 0;
 const int SPIN_ERR = -1;
 const int SPIN_TIMEOUT = -2;
 
-const uint8_t SYNC_SECONDS  = 1;
+const uint8_t SYNC_SECONDS  = 5;
 const uint8_t MODE_FIRST_FF = 0;
 /*
  * The second sync byte is a protocol version. It's value is 0xff for the first
@@ -114,7 +114,7 @@ protected:
   uint32_t sec_offset, nsec_offset;
 
   /* Spinonce maximum work timeout */
-  uint32_t spin_timeout_microseconds_;
+  uint32_t spin_timeout_;
 
   uint8_t message_in[INPUT_SIZE];
   uint8_t message_out[OUTPUT_SIZE];
@@ -148,7 +148,7 @@ public:
     req_param_resp.ints_length = 0;
     req_param_resp.ints = NULL;
 
-    spin_timeout_microseconds_ = 0;
+    spin_timeout_ = 0;
   }
 
   Hardware* getHardware()
@@ -182,11 +182,11 @@ public:
    * one byte at a time. It simply sets the maximum time that one call can
    * process for. You can choose to clear the buffer if that is beneficial if
    * SPIN_TIMEOUT is returned from spinOnce().
-   * @param timeout The timeout in microseconds that spinOnce will function.
+   * @param timeout The timeout in milliseconds that spinOnce will function.
    */
-  void setSpinTimeout(const uint32_t& timeout_milliseconds)
+  void setSpinTimeout(const uint32_t& timeout)
   {
-     spin_timeout_microseconds_ = timeout_milliseconds * 1000;
+     spin_timeout_ = timeout;
   }
 
 protected:
@@ -199,10 +199,10 @@ protected:
 
   bool configured_;
 
-  /* used for syncing the time in micros */
-  uint64_t last_sync_time;
-  uint64_t last_sync_receive_time;
-  uint64_t last_msg_timeout_time;
+  /* used for syncing the time */
+  uint32_t last_sync_time;
+  uint32_t last_sync_receive_time;
+  uint32_t last_msg_timeout_time;
 
 public:
   /* This function goes in your loop() function, it handles
@@ -213,8 +213,8 @@ public:
   virtual int spinOnce()
   {
     /* restart if timed out */
-    uint64_t c_time = hardware_.time_micros();
-    if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 1000 * 2200)) // TODO(floriantschopp): why 2200?
+    uint64_t c_time = hardware_.time();
+    if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 2200))
     {
       configured_ = false;
     }
@@ -232,13 +232,13 @@ public:
     while (true)
     {
       // If a timeout has been specified, check how long spinOnce has been running.
-      if (spin_timeout_microseconds_ > 0)
+      if (spin_timeout_ > 0)
       {
         // If the maximum processing timeout has been exceeded, exit with error.
         // The next spinOnce can continue where it left off, or optionally
         // based on the application in use, the hardware buffer could be flushed
         // and start fresh.
-        if ((hardware_.time_micros() - c_time) > spin_timeout_microseconds_)
+        if ((hardware_.time() - c_time) > spin_timeout_)
         {
           // Exit the spin, processing timeout exceeded.
           return SPIN_TIMEOUT;
@@ -262,7 +262,7 @@ public:
           mode_++;
           last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT * 1000;
         }
-        else if (hardware_.time_micros() - c_time > (SYNC_SECONDS * 1000 * 1000))
+        else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000))
         {
           /* We have been stuck in spinOnce too long, return error */
           configured_ = false;
@@ -350,7 +350,7 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 1000 * 500)))
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 500)))
     {
       requestSyncTime();
       last_sync_time = c_time;
