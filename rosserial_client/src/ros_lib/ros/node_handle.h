@@ -350,7 +350,7 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 500)))
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.5 * 500)))
     {
       requestSyncTime();
       last_sync_time = c_time;
@@ -388,7 +388,7 @@ public:
     t.data.nsec += (offset % 1000000) * 1000000UL;
 
     this->setNow(t.data);
-    last_sync_receive_time = hardware_.time_micros();
+    last_sync_receive_time = hardware_.time();
   }
 
   Time now()
