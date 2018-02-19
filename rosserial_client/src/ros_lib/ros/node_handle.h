@@ -91,7 +91,7 @@ const uint8_t MODE_MESSAGE        = 7;
 const uint8_t MODE_MSG_CHECKSUM   = 8;    // checksum for msg and topic id
 
 
-const uint8_t SERIAL_MSG_TIMEOUT_SECONDS_SECONDS  = 0.02;   // 20 milliseconds to recieve all of message data
+const uint8_t SERIAL_MSG_TIMEOUT_SECONDS  = 0.02;   // 20 milliseconds to recieve all of message data
 
 using rosserial_msgs::TopicInfo;
 
@@ -113,7 +113,7 @@ protected:
   uint32_t sec_offset, nsec_offset;
 
   /* Spinonce maximum work timeout */
-  uint32_t spin_timeout_microseconds_microseconds_;
+  uint32_t spin_timeout_microseconds_;
 
   uint8_t message_in[INPUT_SIZE];
   uint8_t message_out[OUTPUT_SIZE];
