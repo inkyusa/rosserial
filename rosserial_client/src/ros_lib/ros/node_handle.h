@@ -107,7 +107,8 @@ protected:
   Hardware hardware_;
 
   /* time used for syncing */
-  uint64_t rt_time;
+  uint32_t rt_time;
+  uint64_t rt_time_micros;
 
   /* used for computing current time */
   uint32_t sec_offset, nsec_offset;
@@ -237,7 +238,7 @@ public:
         // The next spinOnce can continue where it left off, or optionally
         // based on the application in use, the hardware buffer could be flushed
         // and start fresh.
-        if ((hardware_.time() - c_time) > spin_timeout_microseconds_)
+        if ((hardware_.time_micros() - c_time) > spin_timeout_microseconds_)
         {
           // Exit the spin, processing timeout exceeded.
           return SPIN_TIMEOUT;
@@ -261,7 +262,7 @@ public:
           mode_++;
           last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT * 1000;
         }
-        else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000 * 1000))
+        else if (hardware_.time_micros() - c_time > (SYNC_SECONDS * 1000 * 1000))
         {
           /* We have been stuck in spinOnce too long, return error */
           configured_ = false;
@@ -373,17 +374,18 @@ public:
   {
     std_msgs::Time t;
     publish(TopicInfo::ID_TIME, &t);
-    rt_time = hardware_.time_micros();
+    rt_time_micros = hardware_.time_micros();
+    rt_time = rt_time_micros / 1000;
   }
 
   void syncTime(uint8_t * data)
   {
     std_msgs::Time t;
-    uint64_t offset = hardware_.time_micros() - rt_time;
+    uint64_t offset = hardware_.time_micros() - rt_time_micros;
 
     t.deserialize(data);
-    t.data.sec += offset / 1000;
-    t.data.nsec += (offset % 1000) * 1000000UL;
+    t.data.sec += offset / 1000000;
+    t.data.nsec += (offset % 1000000) * 1000000UL;
 
     this->setNow(t.data);
     last_sync_receive_time = hardware_.time_micros();
