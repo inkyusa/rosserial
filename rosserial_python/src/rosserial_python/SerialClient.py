@@ -636,6 +636,7 @@ class SerialClient:
 
     def handleTimeRequest(self, data):
         """ Respond to device with system time. """
+        rospy.logwarn("Respond to device with system time")
         t = Time()
         t.data = rospy.Time.now()
         data_buffer = StringIO.StringIO()

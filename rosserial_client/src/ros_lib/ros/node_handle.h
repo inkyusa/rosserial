@@ -213,7 +213,7 @@ public:
   virtual int spinOnce()
   {
     /* restart if timed out */
-    uint64_t c_time = hardware_.time();
+    uint32_t c_time = hardware_.time();
     if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 2200))
     {
       configured_ = false;
@@ -260,7 +260,7 @@ public:
         if (data == 0xff)
         {
           mode_++;
-          last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT * 1000;
+          last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT;
         }
         else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000))
         {
