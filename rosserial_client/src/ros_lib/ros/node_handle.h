@@ -350,7 +350,7 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.5 * 500)))
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.1 * 500)))
     {
       requestSyncTime();
       last_sync_time = c_time;
@@ -384,8 +384,8 @@ public:
     uint64_t offset = hardware_.time_micros() - rt_time_micros;
 
     t.deserialize(data);
-    t.data.sec += offset / 1000000;
-    t.data.nsec += (offset % 1000000) * 1000000UL;
+    t.data.sec += offset / 1000000UL;
+    t.data.nsec += (offset % 1000000UL) * 1000;
 
     this->setNow(t.data);
     last_sync_receive_time = hardware_.time();
@@ -395,8 +395,8 @@ public:
   {
     uint64_t mus = hardware_.time_micros();
     Time current_time;
-    current_time.sec = mus / 1000000 + sec_offset;
-    current_time.nsec = (mus % 1000000) * 1000000UL + nsec_offset;
+    current_time.sec = mus / 1000000UL + sec_offset;
+    current_time.nsec = (mus % 1000000UL) * 1000 + nsec_offset;
     normalizeSecNSec(current_time.sec, current_time.nsec);
     return current_time;
   }
@@ -404,8 +404,8 @@ public:
   void setNow(Time & new_now)
   {
     uint32_t mus = hardware_.time_micros();
-    sec_offset = new_now.sec - mus / 1000000 - 1;
-    nsec_offset = new_now.nsec - (mus % 1000000) * 1000000UL + 1000000000UL;
+    sec_offset = new_now.sec - mus / 1000000UL - 1;
+    nsec_offset = new_now.nsec - (mus % 1000000UL) * 1000UL + 1000000000UL;
     normalizeSecNSec(sec_offset, nsec_offset);
   }
 
