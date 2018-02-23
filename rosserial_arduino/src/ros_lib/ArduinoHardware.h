@@ -78,7 +78,7 @@ class ArduinoHardware {
 #else
       iostream = &Serial;
 #endif
-      baud_ = 57600;
+      baud_ = 250000;
     }
     ArduinoHardware(ArduinoHardware& h){
       this->iostream = h.iostream;
@@ -106,6 +106,7 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
+    unsigned long time_micros(){return micros();}
 
   protected:
     SERIAL_CLASS* iostream;
