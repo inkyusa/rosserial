@@ -350,7 +350,7 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.1 * 500)))
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 1000)))
     {
       requestSyncTime();
       last_sync_time = c_time;
