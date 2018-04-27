@@ -109,7 +109,7 @@ class NodeHandle_ : public NodeHandleBase_ {
   double P11_, P12_, P21_, P22_;  // P matrix
   double Q11_, Q12_, Q21_, Q22_;  // Q matrix
   double F11_, F12_, F21_, F22_;  // F matrix
-  double K11_, K12_, K21_, K22_;  // Kalman Gain
+  double K1_, K2_;  // Kalman Gain
   double R_;
   double H1_, H2_;
   uint32_t dt_;
@@ -386,19 +386,19 @@ class NodeHandle_ : public NodeHandleBase_ {
       K1_ = (H1_ * P11_ + H2_ * P12_) * (1 / S);
       K2_ = (H1_ * P21_ + H2_ * P22_) * (1 / S);
       double residual = host_time_mus - client_time_mus -
-                        (H1_ * clock_offset_mus_ + H2_ clock_skew_);
-      if (std::abs(residual) < kOutlierThreshold_) {
+                        (H1_ * clock_offset_mus_ + H2_ * clock_skew_);
+      if (abs(residual) < kOutlierThreshold_) {
         clock_offset_mus_ += K1_ * residual;
         clock_skew_ += K2_ * residual;
 
-        double 1mK1H1 = 1 - K1_ * H1_;
+        double lmK1H1 = 1 - K1_ * H1_; // 1 - K1 * H1
         double mK1H2 = - K1_ * H2_;
         double mK2H1 = - K2_ * H1_;
-        double 1mK2H2 = 1 - K2_ * H2_;
-        P11_ = P11_ * 1mK1H1 + P21_ * nK1H2;
-        P12_ = P12_ * 1mK1H1 + P22_ * nK1H2;
-        P21_ = P11_ * nK2H1 + P21_ * 1mK2H2;
-        P22_ = P12_ * nK2H1 + P22_ * 1mK2H2;
+        double lmK2H2 = 1 - K2_ * H2_; // 1 - K2 * H2
+        P11_ = P11_ * lmK1H1 + P21_ * mK1H2;
+        P12_ = P12_ * lmK1H1 + P22_ * mK1H2;
+        P21_ = P11_ * mK2H1 + P21_ * lmK2H2;
+        P22_ = P12_ * mK2H1 + P22_ * lmK2H2;
       }
     } else {
       // Init state.
