@@ -37,19 +37,17 @@
 
 #include <stdint.h>
 
-#include "std_msgs/Time.h"
-#include "rosserial_msgs/TopicInfo.h"
 #include "rosserial_msgs/Log.h"
 #include "rosserial_msgs/RequestParam.h"
+#include "rosserial_msgs/TopicInfo.h"
+#include "std_msgs/Time.h"
 
 #include "ros/msg.h"
 
-namespace ros
-{
+namespace ros {
 
-class NodeHandleBase_
-{
-public:
+class NodeHandleBase_ {
+ public:
   virtual int publish(int id, const Msg* msg) = 0;
   virtual int spinOnce() = 0;
   virtual bool connected() = 0;
@@ -57,61 +55,73 @@ public:
 }
 
 #include "ros/publisher.h"
-#include "ros/subscriber.h"
-#include "ros/service_server.h"
 #include "ros/service_client.h"
+#include "ros/service_server.h"
+#include "ros/subscriber.h"
 
-namespace ros
-{
+namespace ros {
 
 const int SPIN_OK = 0;
 const int SPIN_ERR = -1;
 const int SPIN_TIMEOUT = -2;
 
-const uint8_t SYNC_SECONDS  = 5;
+const uint8_t SYNC_SECONDS = 5;
 const uint8_t MODE_FIRST_FF = 0;
 /*
  * The second sync byte is a protocol version. It's value is 0xff for the first
- * version of the rosserial protocol (used up to hydro), 0xfe for the second version
+ * version of the rosserial protocol (used up to hydro), 0xfe for the second
+ * version
  * (introduced in hydro), 0xfd for the next, and so on. Its purpose is to enable
- * detection of mismatched protocol versions (e.g. hydro rosserial_python with groovy
+ * detection of mismatched protocol versions (e.g. hydro rosserial_python with
+ * groovy
  * rosserial_arduino. It must be changed in both this file and in
  * rosserial_python/src/rosserial_python/SerialClient.py
  */
-const uint8_t MODE_PROTOCOL_VER   = 1;
-const uint8_t PROTOCOL_VER1       = 0xff; // through groovy
-const uint8_t PROTOCOL_VER2       = 0xfe; // in hydro
-const uint8_t PROTOCOL_VER        = PROTOCOL_VER2;
-const uint8_t MODE_SIZE_L         = 2;
-const uint8_t MODE_SIZE_H         = 3;
-const uint8_t MODE_SIZE_CHECKSUM  = 4;    // checksum for msg size received from size L and H
-const uint8_t MODE_TOPIC_L        = 5;    // waiting for topic id
-const uint8_t MODE_TOPIC_H        = 6;
-const uint8_t MODE_MESSAGE        = 7;
-const uint8_t MODE_MSG_CHECKSUM   = 8;    // checksum for msg and topic id
+const uint8_t MODE_PROTOCOL_VER = 1;
+const uint8_t PROTOCOL_VER1 = 0xff;  // through groovy
+const uint8_t PROTOCOL_VER2 = 0xfe;  // in hydro
+const uint8_t PROTOCOL_VER = PROTOCOL_VER2;
+const uint8_t MODE_SIZE_L = 2;
+const uint8_t MODE_SIZE_H = 3;
+const uint8_t MODE_SIZE_CHECKSUM =
+    4;  // checksum for msg size received from size L and H
+const uint8_t MODE_TOPIC_L = 5;  // waiting for topic id
+const uint8_t MODE_TOPIC_H = 6;
+const uint8_t MODE_MESSAGE = 7;
+const uint8_t MODE_MSG_CHECKSUM = 8;  // checksum for msg and topic id
 
-
-const uint8_t SERIAL_MSG_TIMEOUT  = 20;   // 20 milliseconds to recieve all of message data
+const uint8_t SERIAL_MSG_TIMEOUT =
+    20;  // 20 milliseconds to recieve all of message data
 
 using rosserial_msgs::TopicInfo;
 
 /* Node Handle */
-template<class Hardware,
-         int MAX_SUBSCRIBERS = 25,
-         int MAX_PUBLISHERS = 25,
-         int INPUT_SIZE = 512,
-         int OUTPUT_SIZE = 512>
-class NodeHandle_ : public NodeHandleBase_
-{
-protected:
+template <class Hardware, int MAX_SUBSCRIBERS = 25, int MAX_PUBLISHERS = 25,
+          int INPUT_SIZE = 512, int OUTPUT_SIZE = 512>
+class NodeHandle_ : public NodeHandleBase_ {
+ protected:
   Hardware hardware_;
 
   /* time used for syncing */
-  uint32_t rt_time;
-  uint64_t rt_time_micros;
+  uint64_t client_time_mus;
 
-  /* used for computing current time */
-  uint32_t sec_offset, nsec_offset;
+  /* States of Kalman filter for time estimation*/
+  long double clock_offset_mus_;
+  double clock_skew_;
+  double P11_, P12_, P21_, P22_;  // P matrix
+  double Q11_, Q12_, Q21_, Q22_;  // Q matrix
+  double F11_, F12_, F21_, F22_;  // F matrix
+  double K11_, K12_, K21_, K22_;  // Kalman Gain
+  double R_;
+  double H1_, H2_;
+  uint32_t dt_;
+  bool clock_initialized_;
+
+  double kSigmaInitOffset_;
+  double kSigmaInitSkew_;
+  double kSigmaOffset_;
+  double kSigmaSkew_;
+  double kOutlierThreshold_;
 
   /* Spinonce maximum work timeout */
   uint32_t spin_timeout_;
@@ -119,27 +129,21 @@ protected:
   uint8_t message_in[INPUT_SIZE];
   uint8_t message_out[OUTPUT_SIZE];
 
-  Publisher * publishers[MAX_PUBLISHERS];
-  Subscriber_ * subscribers[MAX_SUBSCRIBERS];
+  Publisher* publishers[MAX_PUBLISHERS];
+  Subscriber_* subscribers[MAX_SUBSCRIBERS];
 
   /*
    * Setup Functions
    */
-public:
-  NodeHandle_() : configured_(false)
-  {
+ public:
+  NodeHandle_() : configured_(false) {
+    for (unsigned int i = 0; i < MAX_PUBLISHERS; i++) publishers[i] = 0;
 
-    for (unsigned int i = 0; i < MAX_PUBLISHERS; i++)
-      publishers[i] = 0;
+    for (unsigned int i = 0; i < MAX_SUBSCRIBERS; i++) subscribers[i] = 0;
 
-    for (unsigned int i = 0; i < MAX_SUBSCRIBERS; i++)
-      subscribers[i] = 0;
+    for (unsigned int i = 0; i < INPUT_SIZE; i++) message_in[i] = 0;
 
-    for (unsigned int i = 0; i < INPUT_SIZE; i++)
-      message_in[i] = 0;
-
-    for (unsigned int i = 0; i < OUTPUT_SIZE; i++)
-      message_out[i] = 0;
+    for (unsigned int i = 0; i < OUTPUT_SIZE; i++) message_out[i] = 0;
 
     req_param_resp.ints_length = 0;
     req_param_resp.ints = NULL;
@@ -151,29 +155,40 @@ public:
     spin_timeout_ = 0;
   }
 
-  Hardware* getHardware()
-  {
-    return &hardware_;
-  }
+  Hardware* getHardware() { return &hardware_; }
 
   /* Start serial, initialize buffers */
-  void initNode()
-  {
+  void initNode() {
     hardware_.init();
     mode_ = 0;
     bytes_ = 0;
     index_ = 0;
     topic_ = 0;
+
+    // Init Kalman filter.
+    kSigmaInitOffset_ = 2e-3;
+    kSigmaInitSkew_ = 1e-3;
+    kSigmaOffset_ = 2e-3;
+    kSigmaSkew_ = 2e-6;
+    kOutlierThreshold_ = 1.0;
+    clock_initialized_ = false;
   };
 
   /* Start a named port, which may be network server IP, initialize buffers */
-  void initNode(char *portName)
-  {
+  void initNode(char* portName) {
     hardware_.init(portName);
     mode_ = 0;
     bytes_ = 0;
     index_ = 0;
     topic_ = 0;
+
+    // Init Kalman filter sigmas.
+    kSigmaInitOffset_ = 2e-3;
+    kSigmaInitSkew_ = 1e-3;
+    kSigmaOffset_ = 2e-3;
+    kSigmaSkew_ = 2e-6;
+    kOutlierThreshold_ = 1.0;
+    clock_initialized_ = false;
   };
 
   /**
@@ -184,13 +199,10 @@ public:
    * SPIN_TIMEOUT is returned from spinOnce().
    * @param timeout The timeout in milliseconds that spinOnce will function.
    */
-  void setSpinTimeout(const uint32_t& timeout)
-  {
-     spin_timeout_ = timeout;
-  }
+  void setSpinTimeout(const uint32_t& timeout) { spin_timeout_ = timeout; }
 
-protected:
-  //State machine variables for spinOnce
+ protected:
+  // State machine variables for spinOnce
   int mode_;
   int bytes_;
   int topic_;
@@ -201,147 +213,112 @@ protected:
 
   /* used for syncing the time */
   uint32_t last_sync_time;
+  uint64_t last_sync_time_mus;
   uint32_t last_sync_receive_time;
   uint32_t last_msg_timeout_time;
 
-public:
+ public:
   /* This function goes in your loop() function, it handles
    *  serial input and callbacks for subscribers.
    */
 
-
-  virtual int spinOnce()
-  {
+  virtual int spinOnce() {
     /* restart if timed out */
     uint32_t c_time = hardware_.time();
-    if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 2200))
-    {
+    if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 2200)) {
       configured_ = false;
     }
 
     /* reset if message has timed out */
-    if (mode_ != MODE_FIRST_FF)
-    {
-      if (c_time > last_msg_timeout_time)
-      {
+    if (mode_ != MODE_FIRST_FF) {
+      if (c_time > last_msg_timeout_time) {
         mode_ = MODE_FIRST_FF;
       }
     }
 
     /* while available buffer, read data */
-    while (true)
-    {
-      // If a timeout has been specified, check how long spinOnce has been running.
-      if (spin_timeout_ > 0)
-      {
+    while (true) {
+      // If a timeout has been specified, check how long spinOnce has been
+      // running.
+      if (spin_timeout_ > 0) {
         // If the maximum processing timeout has been exceeded, exit with error.
         // The next spinOnce can continue where it left off, or optionally
         // based on the application in use, the hardware buffer could be flushed
         // and start fresh.
-        if ((hardware_.time() - c_time) > spin_timeout_)
-        {
+        if ((hardware_.time() - c_time) > spin_timeout_) {
           // Exit the spin, processing timeout exceeded.
           return SPIN_TIMEOUT;
         }
       }
       int data = hardware_.read();
-      if (data < 0)
-        break;
+      if (data < 0) break;
       checksum_ += data;
-      if (mode_ == MODE_MESSAGE)          /* message data being recieved */
+      if (mode_ == MODE_MESSAGE) /* message data being recieved */
       {
         message_in[index_++] = data;
         bytes_--;
-        if (bytes_ == 0)                 /* is message complete? if so, checksum */
+        if (bytes_ == 0) /* is message complete? if so, checksum */
           mode_ = MODE_MSG_CHECKSUM;
-      }
-      else if (mode_ == MODE_FIRST_FF)
-      {
-        if (data == 0xff)
-        {
+      } else if (mode_ == MODE_FIRST_FF) {
+        if (data == 0xff) {
           mode_++;
           last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT;
-        }
-        else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000))
-        {
+        } else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000)) {
           /* We have been stuck in spinOnce too long, return error */
           configured_ = false;
           return SPIN_TIMEOUT;
         }
-      }
-      else if (mode_ == MODE_PROTOCOL_VER)
-      {
-        if (data == PROTOCOL_VER)
-        {
+      } else if (mode_ == MODE_PROTOCOL_VER) {
+        if (data == PROTOCOL_VER) {
           mode_++;
-        }
-        else
-        {
+        } else {
           mode_ = MODE_FIRST_FF;
           if (configured_ == false)
-            requestSyncTime();  /* send a msg back showing our protocol version */
+            requestSyncTime(); /* send a msg back showing our protocol version
+                                  */
         }
-      }
-      else if (mode_ == MODE_SIZE_L)      /* bottom half of message size */
+      } else if (mode_ == MODE_SIZE_L) /* bottom half of message size */
       {
         bytes_ = data;
         index_ = 0;
         mode_++;
-        checksum_ = data;               /* first byte for calculating size checksum */
-      }
-      else if (mode_ == MODE_SIZE_H)      /* top half of message size */
+        checksum_ = data; /* first byte for calculating size checksum */
+      } else if (mode_ == MODE_SIZE_H) /* top half of message size */
       {
         bytes_ += data << 8;
         mode_++;
-      }
-      else if (mode_ == MODE_SIZE_CHECKSUM)
-      {
+      } else if (mode_ == MODE_SIZE_CHECKSUM) {
         if ((checksum_ % 256) == 255)
           mode_++;
         else
-          mode_ = MODE_FIRST_FF;          /* Abandon the frame if the msg len is wrong */
-      }
-      else if (mode_ == MODE_TOPIC_L)     /* bottom half of topic id */
+          mode_ = MODE_FIRST_FF; /* Abandon the frame if the msg len is wrong */
+      } else if (mode_ == MODE_TOPIC_L) /* bottom half of topic id */
       {
         topic_ = data;
         mode_++;
         checksum_ = data;               /* first byte included in checksum */
-      }
-      else if (mode_ == MODE_TOPIC_H)     /* top half of topic id */
+      } else if (mode_ == MODE_TOPIC_H) /* top half of topic id */
       {
         topic_ += data << 8;
         mode_ = MODE_MESSAGE;
-        if (bytes_ == 0)
-          mode_ = MODE_MSG_CHECKSUM;
-      }
-      else if (mode_ == MODE_MSG_CHECKSUM)    /* do checksum */
+        if (bytes_ == 0) mode_ = MODE_MSG_CHECKSUM;
+      } else if (mode_ == MODE_MSG_CHECKSUM) /* do checksum */
       {
         mode_ = MODE_FIRST_FF;
-        if ((checksum_ % 256) == 255)
-        {
-          if (topic_ == TopicInfo::ID_PUBLISHER)
-          {
+        if ((checksum_ % 256) == 255) {
+          if (topic_ == TopicInfo::ID_PUBLISHER) {
             requestSyncTime();
             negotiateTopics();
-            last_sync_time = c_time;
             last_sync_receive_time = c_time;
             return SPIN_ERR;
-          }
-          else if (topic_ == TopicInfo::ID_TIME)
-          {
+          } else if (topic_ == TopicInfo::ID_TIME) {
             syncTime(message_in);
-          }
-          else if (topic_ == TopicInfo::ID_PARAMETER_REQUEST)
-          {
+          } else if (topic_ == TopicInfo::ID_PARAMETER_REQUEST) {
             req_param_resp.deserialize(message_in);
             param_recieved = true;
-          }
-          else if (topic_ == TopicInfo::ID_TX_STOP)
-          {
+          } else if (topic_ == TopicInfo::ID_TX_STOP) {
             configured_ = false;
-          }
-          else
-          {
+          } else {
             if (subscribers[topic_ - 100])
               subscribers[topic_ - 100]->callback(message_in);
           }
@@ -350,63 +327,112 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 1000)))
-    {
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 1000))) {
       requestSyncTime();
-      last_sync_time = c_time;
     }
 
     return SPIN_OK;
   }
 
-
   /* Are we connected to the PC? */
-  virtual bool connected()
-  {
-    return configured_;
-  };
+  virtual bool connected() { return configured_; };
 
   /********************************************************************
-   * Time functions
+   * Time functions using a Kalman filtr adapted from the Cuckoo Time
+   * Translator (https://github.com/ethz-asl/cuckoo_time_translator)
    */
-
-  void requestSyncTime()
-  {
+ private:
+ public:
+  void requestSyncTime() {
     std_msgs::Time t;
     publish(TopicInfo::ID_TIME, &t);
-    rt_time_micros = hardware_.time_micros();
-    rt_time = rt_time_micros / 1000;
+    client_time_mus = hardware_.time_micros();
+    last_sync_time = hardware_.time();
+    last_sync_time_mus = client_time_mus;
   }
 
-  void syncTime(uint8_t * data)
-  {
+  void syncTime(uint8_t* data) {
     std_msgs::Time t;
-    uint64_t offset = hardware_.time_micros() - rt_time_micros;
+
+    // Time offset between request of timesync and recieved host time.
+    uint64_t offset_mus = hardware_.time_micros() - client_time_mus;
 
     t.deserialize(data);
-    t.data.sec += offset / 1000000UL;
-    t.data.nsec += (offset % 1000000UL) * 1000;
 
-    this->setNow(t.data);
+    // Time on the host (would have been at the time of the request).
+    uint64_t host_time_mus =
+        t.data.sec * 1000000UL + t.data.nsec / 1000UL - offset_mus / 2;
+    if (clock_initialized_) {
+      uint64_t dt = client_time_mus - last_sync_time_mus;
+      F11_ = 1;
+      F12_ = dt;
+      F21_ = 0;
+      F22_ = 1;
+
+      // Prediction.
+      clock_offset_mus_ = F11_ * clock_offset_mus_ + F12_ * clock_skew_;
+      clock_skew_ = F21_ * clock_offset_mus_ + F22_ * clock_skew_;
+      double F11P11pF12P21 = F11_ * P11_ + F12_ * P21_;
+      double F11P12pF12P22 = F11_ * P12_ + F12_ * P22_;
+      double F21P11pF22P21 = F21_ * P11_ + F22_ * P21_;
+      double F21P12pF22P22 = F21_ * P12_ + F22_ * P22_;
+      P11_ = F11P11pF12P21 * F11_ + F11P12pF12P22 * F12_ + dt * Q11_;
+      P12_ = F11P11pF12P21 * F21_ + F11P12pF12P22 * F22_ + dt * Q12_;
+      P21_ = F21P11pF22P21 * F11_ + F21P12pF22P22 * F12_ + dt * Q21_;
+      P22_ = F21P11pF22P21 * F21_ + F21P12pF22P22 * F22_ + dt * Q22_;
+
+      // Update.
+      double S = (H1_ * P11_ + H2_ * P21_) * H1_ +
+                 (H1_ * P12_ + H2_ * P22_) * H2_ + R_;
+
+      K1_ = (H1_ * P11_ + H2_ * P12_) * (1 / S);
+      K2_ = (H1_ * P21_ + H2_ * P22_) * (1 / S);
+      double residual = host_time_mus - client_time_mus -
+                        (H1_ * clock_offset_mus_ + H2_ clock_skew_);
+      if (std::abs(residual) < kOutlierThreshold_) {
+        clock_offset_mus_ += K1_ * residual;
+        clock_skew_ += K2_ * residual;
+
+        double 1mK1H1 = 1 - K1_ * H1_;
+        double mK1H2 = - K1_ * H2_;
+        double mK2H1 = - K2_ * H1_;
+        double 1mK2H2 = 1 - K2_ * H2_;
+        P11_ = P11_ * 1mK1H1 + P21_ * nK1H2;
+        P12_ = P12_ * 1mK1H1 + P22_ * nK1H2;
+        P21_ = P11_ * nK2H1 + P21_ * 1mK2H2;
+        P22_ = P12_ * nK2H1 + P22_ * 1mK2H2;
+      }
+    } else {
+      // Init state.
+      clock_offset_mus_ = host_time_mus - client_time_mus;
+      clock_skew_ = 0;
+      P11_ = kSigmaInitOffset_ * kSigmaInitOffset_;
+      P12_ = 0;
+      P21_ = 0;
+      P22_ = kSigmaInitSkew_ * kSigmaInitSkew_;
+
+      // Init matrices.
+      H1_ = 1;
+      H2_ = 0;
+      Q11_ = 0;
+      Q12_ = 0;
+      Q21_ = 0;
+      Q22_ = kSigmaSkew_ * kSigmaSkew_;
+      R_ = kSigmaOffset_ * kSigmaOffset_;
+    }
+
     last_sync_receive_time = hardware_.time();
   }
 
-  Time now()
-  {
+  Time now() {
     uint64_t mus = hardware_.time_micros();
+    uint64_t mus_corrected =
+        mus + clock_offset_mus_ + clock_skew_ * (mus - last_sync_time_mus);
     Time current_time;
-    current_time.sec = mus / 1000000UL + sec_offset;
-    current_time.nsec = (mus % 1000000UL) * 1000 + nsec_offset;
+    current_time.sec = mus_corrected / 1000000UL;
+    current_time.nsec = (mus_corrected % 1000000UL) * 1000;
     normalizeSecNSec(current_time.sec, current_time.nsec);
     return current_time;
-  }
-
-  void setNow(Time & new_now)
-  {
-    uint32_t mus = hardware_.time_micros();
-    sec_offset = new_now.sec - mus / 1000000UL - 1;
-    nsec_offset = new_now.nsec - (mus % 1000000UL) * 1000UL + 1000000000UL;
-    normalizeSecNSec(sec_offset, nsec_offset);
   }
 
   /********************************************************************
@@ -414,11 +440,9 @@ public:
    */
 
   /* Register a new publisher */
-  bool advertise(Publisher & p)
-  {
-    for (int i = 0; i < MAX_PUBLISHERS; i++)
-    {
-      if (publishers[i] == 0) // empty slot
+  bool advertise(Publisher& p) {
+    for (int i = 0; i < MAX_PUBLISHERS; i++) {
+      if (publishers[i] == 0)  // empty slot
       {
         publishers[i] = &p;
         p.id_ = i + 100 + MAX_SUBSCRIBERS;
@@ -430,12 +454,10 @@ public:
   }
 
   /* Register a new subscriber */
-  template<typename SubscriberT>
-  bool subscribe(SubscriberT& s)
-  {
-    for (int i = 0; i < MAX_SUBSCRIBERS; i++)
-    {
-      if (subscribers[i] == 0) // empty slot
+  template <typename SubscriberT>
+  bool subscribe(SubscriberT& s) {
+    for (int i = 0; i < MAX_SUBSCRIBERS; i++) {
+      if (subscribers[i] == 0)  // empty slot
       {
         subscribers[i] = static_cast<Subscriber_*>(&s);
         s.id_ = i + 100;
@@ -446,13 +468,11 @@ public:
   }
 
   /* Register a new Service Server */
-  template<typename MReq, typename MRes, typename ObjT>
-  bool advertiseService(ServiceServer<MReq, MRes, ObjT>& srv)
-  {
+  template <typename MReq, typename MRes, typename ObjT>
+  bool advertiseService(ServiceServer<MReq, MRes, ObjT>& srv) {
     bool v = advertise(srv.pub);
-    for (int i = 0; i < MAX_SUBSCRIBERS; i++)
-    {
-      if (subscribers[i] == 0) // empty slot
+    for (int i = 0; i < MAX_SUBSCRIBERS; i++) {
+      if (subscribers[i] == 0)  // empty slot
       {
         subscribers[i] = static_cast<Subscriber_*>(&srv);
         srv.id_ = i + 100;
@@ -463,13 +483,11 @@ public:
   }
 
   /* Register a new Service Client */
-  template<typename MReq, typename MRes>
-  bool serviceClient(ServiceClient<MReq, MRes>& srv)
-  {
+  template <typename MReq, typename MRes>
+  bool serviceClient(ServiceClient<MReq, MRes>& srv) {
     bool v = advertise(srv.pub);
-    for (int i = 0; i < MAX_SUBSCRIBERS; i++)
-    {
-      if (subscribers[i] == 0) // empty slot
+    for (int i = 0; i < MAX_SUBSCRIBERS; i++) {
+      if (subscribers[i] == 0)  // empty slot
       {
         subscribers[i] = static_cast<Subscriber_*>(&srv);
         srv.id_ = i + 100;
@@ -479,30 +497,27 @@ public:
     return false;
   }
 
-  void negotiateTopics()
-  {
+  void negotiateTopics() {
     rosserial_msgs::TopicInfo ti;
     int i;
-    for (i = 0; i < MAX_PUBLISHERS; i++)
-    {
-      if (publishers[i] != 0) // non-empty slot
+    for (i = 0; i < MAX_PUBLISHERS; i++) {
+      if (publishers[i] != 0)  // non-empty slot
       {
         ti.topic_id = publishers[i]->id_;
-        ti.topic_name = (char *) publishers[i]->topic_;
-        ti.message_type = (char *) publishers[i]->msg_->getType();
-        ti.md5sum = (char *) publishers[i]->msg_->getMD5();
+        ti.topic_name = (char*)publishers[i]->topic_;
+        ti.message_type = (char*)publishers[i]->msg_->getType();
+        ti.md5sum = (char*)publishers[i]->msg_->getMD5();
         ti.buffer_size = OUTPUT_SIZE;
         publish(publishers[i]->getEndpointType(), &ti);
       }
     }
-    for (i = 0; i < MAX_SUBSCRIBERS; i++)
-    {
-      if (subscribers[i] != 0) // non-empty slot
+    for (i = 0; i < MAX_SUBSCRIBERS; i++) {
+      if (subscribers[i] != 0)  // non-empty slot
       {
         ti.topic_id = subscribers[i]->id_;
-        ti.topic_name = (char *) subscribers[i]->topic_;
-        ti.message_type = (char *) subscribers[i]->getMsgType();
-        ti.md5sum = (char *) subscribers[i]->getMsgMD5();
+        ti.topic_name = (char*)subscribers[i]->topic_;
+        ti.message_type = (char*)subscribers[i]->getMsgType();
+        ti.md5sum = (char*)subscribers[i]->getMsgMD5();
         ti.buffer_size = INPUT_SIZE;
         publish(subscribers[i]->getEndpointType(), &ti);
       }
@@ -510,10 +525,8 @@ public:
     configured_ = true;
   }
 
-  virtual int publish(int id, const Msg * msg)
-  {
-    if (id >= 100 && !configured_)
-      return 0;
+  virtual int publish(int id, const Msg* msg) {
+    if (id >= 100 && !configured_) return 0;
 
     /* serialize message */
     int l = msg->serialize(message_out + 7);
@@ -529,18 +542,14 @@ public:
 
     /* calculate checksum */
     int chk = 0;
-    for (int i = 5; i < l + 7; i++)
-      chk += message_out[i];
+    for (int i = 5; i < l + 7; i++) chk += message_out[i];
     l += 7;
     message_out[l++] = 255 - (chk % 256);
 
-    if (l <= OUTPUT_SIZE)
-    {
+    if (l <= OUTPUT_SIZE) {
       hardware_.write(message_out, l);
       return l;
-    }
-    else
-    {
+    } else {
       logerror("Message from device dropped: message larger than buffer.");
       return -1;
     }
@@ -550,57 +559,38 @@ public:
    * Logging
    */
 
-private:
-  void log(char byte, const char * msg)
-  {
+ private:
+  void log(char byte, const char* msg) {
     rosserial_msgs::Log l;
     l.level = byte;
     l.msg = (char*)msg;
     publish(rosserial_msgs::TopicInfo::ID_LOG, &l);
   }
 
-public:
-  void logdebug(const char* msg)
-  {
-    log(rosserial_msgs::Log::ROSDEBUG, msg);
-  }
-  void loginfo(const char * msg)
-  {
-    log(rosserial_msgs::Log::INFO, msg);
-  }
-  void logwarn(const char *msg)
-  {
-    log(rosserial_msgs::Log::WARN, msg);
-  }
-  void logerror(const char*msg)
-  {
-    log(rosserial_msgs::Log::ERROR, msg);
-  }
-  void logfatal(const char*msg)
-  {
-    log(rosserial_msgs::Log::FATAL, msg);
-  }
+ public:
+  void logdebug(const char* msg) { log(rosserial_msgs::Log::ROSDEBUG, msg); }
+  void loginfo(const char* msg) { log(rosserial_msgs::Log::INFO, msg); }
+  void logwarn(const char* msg) { log(rosserial_msgs::Log::WARN, msg); }
+  void logerror(const char* msg) { log(rosserial_msgs::Log::ERROR, msg); }
+  void logfatal(const char* msg) { log(rosserial_msgs::Log::FATAL, msg); }
 
   /********************************************************************
    * Parameters
    */
 
-private:
+ private:
   bool param_recieved;
   rosserial_msgs::RequestParamResponse req_param_resp;
 
-  bool requestParam(const char * name, int time_out =  1000)
-  {
+  bool requestParam(const char* name, int time_out = 1000) {
     param_recieved = false;
     rosserial_msgs::RequestParamRequest req;
-    req.name  = (char*)name;
+    req.name = (char*)name;
     publish(TopicInfo::ID_PARAMETER_REQUEST, &req);
     uint32_t end_time = hardware_.time() + time_out;
-    while (!param_recieved)
-    {
+    while (!param_recieved) {
       spinOnce();
-      if (hardware_.time() > end_time)
-      {
+      if (hardware_.time() > end_time) {
         logwarn("Failed to get param: timeout expired");
         return false;
       }
@@ -608,63 +598,48 @@ private:
     return true;
   }
 
-public:
-  bool getParam(const char* name, int* param, int length = 1, int timeout = 1000)
-  {
-    if (requestParam(name, timeout))
-    {
-      if (length == req_param_resp.ints_length)
-      {
-        //copy it over
-        for (int i = 0; i < length; i++)
-          param[i] = req_param_resp.ints[i];
+ public:
+  bool getParam(const char* name, int* param, int length = 1,
+                int timeout = 1000) {
+    if (requestParam(name, timeout)) {
+      if (length == req_param_resp.ints_length) {
+        // copy it over
+        for (int i = 0; i < length; i++) param[i] = req_param_resp.ints[i];
         return true;
-      }
-      else
-      {
+      } else {
         logwarn("Failed to get param: length mismatch");
       }
     }
     return false;
   }
-  bool getParam(const char* name, float* param, int length = 1, int timeout = 1000)
-  {
-    if (requestParam(name, timeout))
-    {
-      if (length == req_param_resp.floats_length)
-      {
-        //copy it over
-        for (int i = 0; i < length; i++)
-          param[i] = req_param_resp.floats[i];
+  bool getParam(const char* name, float* param, int length = 1,
+                int timeout = 1000) {
+    if (requestParam(name, timeout)) {
+      if (length == req_param_resp.floats_length) {
+        // copy it over
+        for (int i = 0; i < length; i++) param[i] = req_param_resp.floats[i];
         return true;
-      }
-      else
-      {
+      } else {
         logwarn("Failed to get param: length mismatch");
       }
     }
     return false;
   }
-  bool getParam(const char* name, char** param, int length = 1, int timeout = 1000)
-  {
-    if (requestParam(name, timeout))
-    {
-      if (length == req_param_resp.strings_length)
-      {
-        //copy it over
+  bool getParam(const char* name, char** param, int length = 1,
+                int timeout = 1000) {
+    if (requestParam(name, timeout)) {
+      if (length == req_param_resp.strings_length) {
+        // copy it over
         for (int i = 0; i < length; i++)
           strcpy(param[i], req_param_resp.strings[i]);
         return true;
-      }
-      else
-      {
+      } else {
         logwarn("Failed to get param: length mismatch");
       }
     }
     return false;
   }
 };
-
 }
 
 #endif
