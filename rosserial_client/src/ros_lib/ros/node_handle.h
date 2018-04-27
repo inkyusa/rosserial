@@ -70,12 +70,10 @@ const uint8_t MODE_FIRST_FF = 0;
 /*
  * The second sync byte is a protocol version. It's value is 0xff for the first
  * version of the rosserial protocol (used up to hydro), 0xfe for the second
- * version
- * (introduced in hydro), 0xfd for the next, and so on. Its purpose is to enable
- * detection of mismatched protocol versions (e.g. hydro rosserial_python with
- * groovy
- * rosserial_arduino. It must be changed in both this file and in
- * rosserial_python/src/rosserial_python/SerialClient.py
+ * version (introduced in hydro), 0xfd for the next, and so on. Its purpose is 
+ * to enable detection of mismatched protocol versions (e.g. hydro 
+ * rosserial_python with groovy rosserial_arduino. It must be changed in both 
+ * this file and in rosserial_python/src/rosserial_python/SerialClient.py
  */
 const uint8_t MODE_PROTOCOL_VER = 1;
 const uint8_t PROTOCOL_VER1 = 0xff;  // through groovy
