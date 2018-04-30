@@ -70,9 +70,9 @@ const uint8_t MODE_FIRST_FF = 0;
 /*
  * The second sync byte is a protocol version. It's value is 0xff for the first
  * version of the rosserial protocol (used up to hydro), 0xfe for the second
- * version (introduced in hydro), 0xfd for the next, and so on. Its purpose is 
- * to enable detection of mismatched protocol versions (e.g. hydro 
- * rosserial_python with groovy rosserial_arduino. It must be changed in both 
+ * version (introduced in hydro), 0xfd for the next, and so on. Its purpose is
+ * to enable detection of mismatched protocol versions (e.g. hydro
+ * rosserial_python with groovy rosserial_arduino. It must be changed in both
  * this file and in rosserial_python/src/rosserial_python/SerialClient.py
  */
 const uint8_t MODE_PROTOCOL_VER = 1;
@@ -102,24 +102,18 @@ class NodeHandle_ : public NodeHandleBase_ {
 
   /* time used for syncing */
   uint64_t client_time_mus;
+  uint64_t host_time_mus;
 
   /* States of Kalman filter for time estimation*/
-  long double clock_offset_mus_;
-  double clock_skew_;
-  double P11_, P12_, P21_, P22_;  // P matrix
-  double Q11_, Q12_, Q21_, Q22_;  // Q matrix
-  double F11_, F12_, F21_, F22_;  // F matrix
-  double K1_, K2_;  // Kalman Gain
-  double R_;
-  double H1_, H2_;
-  uint32_t dt_;
-  bool clock_initialized_;
-
-  double kSigmaInitOffset_;
-  double kSigmaInitSkew_;
-  double kSigmaOffset_;
-  double kSigmaSkew_;
-  double kOutlierThreshold_;
+  uint64_t initial_clock_offset_mus;
+  double clock_offset_s;
+  double clock_skew;
+  double dt;
+  double P11, P12, P21, P22;  // P matrix
+  double K1, K2;              // Kalman Gain
+  bool clock_initialized;
+  bool request_sync;
+  bool sync_time;
 
   /* Spinonce maximum work timeout */
   uint32_t spin_timeout_;
@@ -134,7 +128,11 @@ class NodeHandle_ : public NodeHandleBase_ {
    * Setup Functions
    */
  public:
-  NodeHandle_() : configured_(false) {
+  NodeHandle_()
+      : configured_(false),
+        clock_initialized(false),
+        request_sync(false),
+        sync_time(false) {
     for (unsigned int i = 0; i < MAX_PUBLISHERS; i++) publishers[i] = 0;
 
     for (unsigned int i = 0; i < MAX_SUBSCRIBERS; i++) subscribers[i] = 0;
@@ -162,14 +160,6 @@ class NodeHandle_ : public NodeHandleBase_ {
     bytes_ = 0;
     index_ = 0;
     topic_ = 0;
-
-    // Init Kalman filter.
-    kSigmaInitOffset_ = 2e-3;
-    kSigmaInitSkew_ = 1e-3;
-    kSigmaOffset_ = 2e-3;
-    kSigmaSkew_ = 2e-6;
-    kOutlierThreshold_ = 1.0;
-    clock_initialized_ = false;
   };
 
   /* Start a named port, which may be network server IP, initialize buffers */
@@ -179,14 +169,6 @@ class NodeHandle_ : public NodeHandleBase_ {
     bytes_ = 0;
     index_ = 0;
     topic_ = 0;
-
-    // Init Kalman filter sigmas.
-    kSigmaInitOffset_ = 2e-3;
-    kSigmaInitSkew_ = 1e-3;
-    kSigmaOffset_ = 2e-3;
-    kSigmaSkew_ = 2e-6;
-    kOutlierThreshold_ = 1.0;
-    clock_initialized_ = false;
   };
 
   /**
@@ -325,7 +307,11 @@ class NodeHandle_ : public NodeHandleBase_ {
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 1000))) {
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 1000)) &&
+        !request_sync && !sync_time) {
+      request_sync = true;
+      last_sync_time = c_time;
+      last_sync_time_mus = client_time_mus;
       requestSyncTime();
     }
 
@@ -343,92 +329,82 @@ class NodeHandle_ : public NodeHandleBase_ {
  public:
   void requestSyncTime() {
     std_msgs::Time t;
+    if (request_sync) {
+      client_time_mus = hardware_.time_micros();
+      sync_time = true;
+      request_sync = false;
+    }
     publish(TopicInfo::ID_TIME, &t);
-    client_time_mus = hardware_.time_micros();
-    last_sync_time = hardware_.time();
-    last_sync_time_mus = client_time_mus;
   }
 
   void syncTime(uint8_t* data) {
-    std_msgs::Time t;
+    if (sync_time) {
+      std_msgs::Time t;
+      // Time offset between request of timesync and recieved host time.
+      uint64_t offset_mus = hardware_.time_micros() - client_time_mus;
 
-    // Time offset between request of timesync and recieved host time.
-    uint64_t offset_mus = hardware_.time_micros() - client_time_mus;
+      t.deserialize(data);
 
-    t.deserialize(data);
+      // Time on the host (would have been at the time of the request).
+      host_time_mus =
+          t.data.sec * 1000000ULL + t.data.nsec / 1000ULL - offset_mus / 2;
+      if (clock_initialized) {
+        dt = ((double)(client_time_mus - last_sync_time_mus)) / 1000000.0;
+        // Prediction.
+        clock_offset_s = clock_offset_s + dt * clock_skew;
+        clock_skew = clock_skew;
+        P11 = P11 + dt * P21 + (P12 + dt * P22) * dt;
+        P12 = P12 + dt * P22;
+        P21 = P21 + dt * P22;
+        P22 = P22 + dt * 1e-12;
 
-    // Time on the host (would have been at the time of the request).
-    uint64_t host_time_mus =
-        t.data.sec * 1000000UL + t.data.nsec / 1000UL - offset_mus / 2;
-    if (clock_initialized_) {
-      uint64_t dt = client_time_mus - last_sync_time_mus;
-      F11_ = 1;
-      F12_ = dt;
-      F21_ = 0;
-      F22_ = 1;
+        // Update.
+        double S_inv = 1.0 / (P11 + 4e-6);
 
-      // Prediction.
-      clock_offset_mus_ = F11_ * clock_offset_mus_ + F12_ * clock_skew_;
-      clock_skew_ = F21_ * clock_offset_mus_ + F22_ * clock_skew_;
-      double F11P11pF12P21 = F11_ * P11_ + F12_ * P21_;
-      double F11P12pF12P22 = F11_ * P12_ + F12_ * P22_;
-      double F21P11pF22P21 = F21_ * P11_ + F22_ * P21_;
-      double F21P12pF22P22 = F21_ * P12_ + F22_ * P22_;
-      P11_ = F11P11pF12P21 * F11_ + F11P12pF12P22 * F12_ + dt * Q11_;
-      P12_ = F11P11pF12P21 * F21_ + F11P12pF12P22 * F22_ + dt * Q12_;
-      P21_ = F21P11pF22P21 * F11_ + F21P12pF22P22 * F12_ + dt * Q21_;
-      P22_ = F21P11pF22P21 * F21_ + F21P12pF22P22 * F22_ + dt * Q22_;
+        K1 = P11 * S_inv;
+        K2 = P21 * S_inv;
+        double residual = ((double)(host_time_mus - initial_clock_offset_mus) -
+                           client_time_mus) /
+                              1000000.0 -
+                          clock_offset_s;
+        if (abs(residual) < 1000.0) {
+          clock_offset_s += K1 * residual;
+          clock_skew += K2 * residual;
 
-      // Update.
-      double S = (H1_ * P11_ + H2_ * P21_) * H1_ +
-                 (H1_ * P12_ + H2_ * P22_) * H2_ + R_;
+          double lmK1H1 = 1 - K1;  // 1 - K1 * H1
+          P11 = P11 * lmK1H1;
+          P12 = P12 * lmK1H1;
+          P21 = -P11 * K2 + P21;
+          P22 = -P12 * K2 + P22;
+        }
+      } else {
+        // Init state.
+        initial_clock_offset_mus = host_time_mus - client_time_mus;
+        clock_offset_s = 0;
+        clock_skew = 0;
+        P11 = 4e-6;
+        P12 = 0;
+        P21 = 0;
+        P22 = 1e-12;
 
-      K1_ = (H1_ * P11_ + H2_ * P12_) * (1 / S);
-      K2_ = (H1_ * P21_ + H2_ * P22_) * (1 / S);
-      double residual = host_time_mus - client_time_mus -
-                        (H1_ * clock_offset_mus_ + H2_ * clock_skew_);
-      if (abs(residual) < kOutlierThreshold_) {
-        clock_offset_mus_ += K1_ * residual;
-        clock_skew_ += K2_ * residual;
-
-        double lmK1H1 = 1 - K1_ * H1_; // 1 - K1 * H1
-        double mK1H2 = - K1_ * H2_;
-        double mK2H1 = - K2_ * H1_;
-        double lmK2H2 = 1 - K2_ * H2_; // 1 - K2 * H2
-        P11_ = P11_ * lmK1H1 + P21_ * mK1H2;
-        P12_ = P12_ * lmK1H1 + P22_ * mK1H2;
-        P21_ = P11_ * mK2H1 + P21_ * lmK2H2;
-        P22_ = P12_ * mK2H1 + P22_ * lmK2H2;
+        clock_initialized = true;
       }
-    } else {
-      // Init state.
-      clock_offset_mus_ = host_time_mus - client_time_mus;
-      clock_skew_ = 0;
-      P11_ = kSigmaInitOffset_ * kSigmaInitOffset_;
-      P12_ = 0;
-      P21_ = 0;
-      P22_ = kSigmaInitSkew_ * kSigmaInitSkew_;
-
-      // Init matrices.
-      H1_ = 1;
-      H2_ = 0;
-      Q11_ = 0;
-      Q12_ = 0;
-      Q21_ = 0;
-      Q22_ = kSigmaSkew_ * kSigmaSkew_;
-      R_ = kSigmaOffset_ * kSigmaOffset_;
+      last_sync_receive_time = hardware_.time();
+      sync_time = false;
     }
-
-    last_sync_receive_time = hardware_.time();
   }
 
   Time now() {
     uint64_t mus = hardware_.time_micros();
-    uint64_t mus_corrected =
-        mus + clock_offset_mus_ + clock_skew_ * (mus - last_sync_time_mus);
+    uint64_t mus_corrected = 
+         mus + initial_clock_offset_mus +
+         (uint64_t)((clock_offset_s +
+                     clock_skew *
+                         ((long double)(mus - last_sync_time_mus) / 1000000.0)) *
+                         1000000.0);
     Time current_time;
-    current_time.sec = mus_corrected / 1000000UL;
-    current_time.nsec = (mus_corrected % 1000000UL) * 1000;
+    current_time.sec = mus_corrected / 1000000ULL;
+    current_time.nsec = (mus_corrected % 1000000ULL) * 1000ULL;
     normalizeSecNSec(current_time.sec, current_time.nsec);
     return current_time;
   }
