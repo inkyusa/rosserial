@@ -113,10 +113,11 @@ class ArduinoHardware {
 
     unsigned long time(){return millis();}
     uint64_t time_micros(){
-      uint32_t micros = micros();
-      uint32_t micros_delta = micros - micros_previous_;
+      uint32_t micros_current = micros();
+      uint32_t micros_delta = micros_current - micros_previous_;
       micros_now_ += micros_delta;
-      micros_previous_ = micros;
+      micros_previous_ = micros_current;
+      return micros_now_;
     }
 
   protected:

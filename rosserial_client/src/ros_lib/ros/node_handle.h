@@ -306,8 +306,8 @@ class NodeHandle_ : public NodeHandleBase_ {
       }
     }
 
-    /* occasionally sync time (2 times as often as SYNC_SECONDS)*/
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.5 * 1000))) {
+    /* occasionally sync time (5 times as often as SYNC_SECONDS)*/
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.2 * 1000))) {
       requestSyncTime();
       last_sync_time = c_time;
     }
