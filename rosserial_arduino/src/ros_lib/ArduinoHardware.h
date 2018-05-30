@@ -67,6 +67,8 @@ class ArduinoHardware {
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
       iostream = io;
       baud_ = baud;
+      micros_offset_ = 0ULL;
+      micros_previous_ = 0UL;
     }
     ArduinoHardware()
     {
@@ -79,10 +81,14 @@ class ArduinoHardware {
       iostream = &Serial;
 #endif
       baud_ = 250000;
+      micros_offset_ = 0ULL;
+      micros_previous_ = 0UL;
     }
     ArduinoHardware(ArduinoHardware& h){
       this->iostream = h.iostream;
       this->baud_ = h.baud_;
+      micros_offset_ = 0ULL;
+      micros_previous_ = 0UL;
     }
   
     void setBaud(long baud){
@@ -106,11 +112,20 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
-    unsigned long long time_micros(){return micros();}
+    uint64_t time_micros() {
+      uint32_t micros_current = micros();
+      if (micros_current < micros_previous_) {
+        micros_offset_ += 4294967296;
+      }
+      micros_previous_ = micros_current;
+      return micros_current + micros_offset_;
+    }
 
   protected:
     SERIAL_CLASS* iostream;
     long baud_;
+    uint64_t micros_offset_;
+    uint32_t micros_previous_;
 };
 
 #endif
