@@ -338,7 +338,7 @@ class NodeHandle_ : public NodeHandleBase_ {
 
     // Time on the host (would have been at the time of the request).
     host_time_mus =
-        t.data.sec * 1000000ULL + t.data.nsec / 1000ULL - offset_mus / 2;
+        t.data.sec * 1000000ULL + t.data.nsec / 1000ULL - offset_mus / 2ULL;
     if (clock_initialized) {
       dt = ((double)(client_time_mus - last_sync_time_mus)) / 1000000.0;
       // Prediction.
@@ -347,10 +347,10 @@ class NodeHandle_ : public NodeHandleBase_ {
       P11 = P11 + dt * P21 + (P12 + dt * P22) * dt;
       P12 = P12 + dt * P22;
       P21 = P21 + dt * P22;
-      P22 = P22 + dt * 1e-11;
+      P22 = P22 + dt * 1.0e-11;
 
       // Update.
-      double S_inv = 1.0 / (P11 + 1e-6);
+      double S_inv = 1.0 / (P11 + 1.0e-6);
 
       K1 = P11 * S_inv;
       K2 = P21 * S_inv;
@@ -362,7 +362,7 @@ class NodeHandle_ : public NodeHandleBase_ {
         clock_offset_s += K1 * residual;
         clock_skew += K2 * residual;
 
-        double lmK1H1 = 1 - K1;  // 1 - K1 * H1
+        double lmK1H1 = 1.0 - K1;  // 1 - K1 * H1
         P11 = P11 * lmK1H1;
         P12 = P12 * lmK1H1;
         P21 = -P11 * K2 + P21;
@@ -371,12 +371,12 @@ class NodeHandle_ : public NodeHandleBase_ {
     } else {
       // Init state.
       initial_clock_offset_mus = host_time_mus - client_time_mus;
-      clock_offset_s = 0;
-      clock_skew = 0;
-      P11 = 4e-6;
-      P12 = 0;
-      P21 = 0;
-      P22 = 1e-11;
+      clock_offset_s = 0.0;
+      clock_skew = 0.0;
+      P11 = 4.0e-6;
+      P12 = 0.0;
+      P21 = 0.0;
+      P22 = 1.0e-11;
 
       clock_initialized = true;
     }

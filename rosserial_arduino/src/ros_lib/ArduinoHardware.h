@@ -106,7 +106,7 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
-    unsigned long time_micros(){return micros();}
+    unsigned long long time_micros(){return micros();}
 
   protected:
     SERIAL_CLASS* iostream;
