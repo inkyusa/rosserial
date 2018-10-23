@@ -602,6 +602,24 @@ class NodeHandle_ : public NodeHandleBase_ {
     }
     return false;
   }
+  bool getParam(const char* name, bool* param, int length = 1, int timeout = 1000)
+  {
+    if (requestParam(name, timeout))
+    {
+      if (length == req_param_resp.ints_length)
+      {
+        //copy it over
+        for (int i = 0; i < length; i++)
+          param[i] = req_param_resp.ints[i];
+        return true;
+      }
+      else
+      {
+        logwarn("Failed to get param: length mismatch");
+      }
+    }
+    return false;
+  }
 };
 }
 
