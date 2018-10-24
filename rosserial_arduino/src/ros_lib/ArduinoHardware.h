@@ -62,6 +62,8 @@
   #define SERIAL_CLASS HardwareSerial
 #endif
 
+#include <util/atomic.h>
+
 class ArduinoHardware {
   public:
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
@@ -114,10 +116,19 @@ class ArduinoHardware {
     unsigned long time(){return millis();}
     uint64_t time_micros() {
       uint32_t micros_current = micros();
-      if (micros_current < micros_previous_) {
-        micros_offset_ += 4294967296;
+      ATOMIC_BLOCK(ATOMIC_FORCEON) {
+        static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
+            "Size of unsigned long long is not equal to uint64_t.");
+        static_assert(sizeof(unsigned long) == sizeof(uint32_t),
+            "Size of unsigned long is not equal to uint32_t.");
+
+        // Make sure that the difference actually is the result of an overflow of
+        // the micros variable and not something else.
+        if (micros_previous_ > micros_current) {
+          micros_offset_ += 4294967296;
+        }
+        micros_previous_ = micros_current;
       }
-      micros_previous_ = micros_current;
       return micros_current + micros_offset_;
     }
 

@@ -358,7 +358,8 @@ class NodeHandle_ : public NodeHandleBase_ {
                          client_time_mus) /
                             1000000.0 -
                         clock_offset_s;
-      if (abs(residual) < 5.0) {
+      if (abs(residual) < 5.0) { 
+        // Only do the offset if the residual is withing certain limits.
         clock_offset_s += K1 * residual;
         clock_skew += K2 * residual;
 
