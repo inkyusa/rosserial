@@ -116,7 +116,7 @@ class ArduinoHardware {
     unsigned long time(){return millis();}
     uint64_t time_micros() {
       uint32_t micros_current = micros();
-      ATOMIC_BLOCK(ATOMIC_FORCEON) {
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
             "Size of unsigned long long is not equal to uint64_t.");
         static_assert(sizeof(unsigned long) == sizeof(uint32_t),
