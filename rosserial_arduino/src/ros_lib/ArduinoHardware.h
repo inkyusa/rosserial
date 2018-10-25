@@ -69,8 +69,8 @@ class ArduinoHardware {
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
       iostream = io;
       baud_ = baud;
-      micros_offset_ = 0ULL;
-      micros_previous_ = 0UL;
+      mus_now_ = 0ULL;
+      mus_prev_ = 0UL;
     }
     ArduinoHardware()
     {
@@ -83,14 +83,10 @@ class ArduinoHardware {
       iostream = &Serial;
 #endif
       baud_ = 250000;
-      micros_offset_ = 0ULL;
-      micros_previous_ = 0UL;
     }
     ArduinoHardware(ArduinoHardware& h){
       this->iostream = h.iostream;
       this->baud_ = h.baud_;
-      micros_offset_ = 0ULL;
-      micros_previous_ = 0UL;
     }
   
     void setBaud(long baud){
@@ -114,29 +110,26 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
-    uint64_t time_micros() {
-      uint32_t micros_current = micros();
+    unsigned long long time_micros() {
       ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
             "Size of unsigned long long is not equal to uint64_t.");
         static_assert(sizeof(unsigned long) == sizeof(uint32_t),
             "Size of unsigned long is not equal to uint32_t.");
-
-        // Make sure that the difference actually is the result of an overflow of
-        // the micros variable and not something else.
-        if (micros_previous_ > micros_current) {
-          micros_offset_ += 4294967296;
-        }
-        micros_previous_ = micros_current;
+      uint32_t mus = micros();
+        uint32_t mus_delta = mus - mus_prev_;
+        mus_now_ += mus_delta;
+        mus_prev_ = mus;
       }
-      return micros_current + micros_offset_;
+      return mus_now_;
     }
 
   protected:
     SERIAL_CLASS* iostream;
     long baud_;
-    uint64_t micros_offset_;
-    uint32_t micros_previous_;
+  private:
+    uint64_t mus_now_;
+    uint32_t mus_prev_;
 };
 
 #endif
