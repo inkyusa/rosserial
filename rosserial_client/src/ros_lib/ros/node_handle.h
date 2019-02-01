@@ -359,7 +359,7 @@ class NodeHandle_ : public NodeHandleBase_ {
                             1000000.0 -
                         clock_offset_s;
       if (abs(residual) < 5.0) { 
-        // Only do the offset if the residual is withing certain limits.
+        // Only do the update if the residual is withing certain limits.
         clock_offset_s += K1 * residual;
         clock_skew += K2 * residual;
 
@@ -388,7 +388,7 @@ class NodeHandle_ : public NodeHandleBase_ {
     uint64_t mus = hardware_.time_micros();
     uint64_t mus_corrected =
         mus + initial_clock_offset_mus +
-        (uint64_t)((clock_offset_s +
+        (int64_t)((clock_offset_s +
                     clock_skew *
                         ((long double)(mus - last_sync_time_mus) / 1000000.0)) *
                    1000000.0);
