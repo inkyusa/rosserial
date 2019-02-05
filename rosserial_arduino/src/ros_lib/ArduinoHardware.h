@@ -115,7 +115,6 @@ class ArduinoHardware {
 
     unsigned long time(){return millis();}
     unsigned long long time_micros() {
-      /*
      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
             "Size of unsigned long long is not equal to uint64_t.");
@@ -126,8 +125,7 @@ class ArduinoHardware {
         mus_now_ += mus_delta;
         mus_prev_ = mus;
       }
-      return mus_now_;*/
-      return micros();
+      return mus_now_;
     }
 
   protected:
