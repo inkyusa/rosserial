@@ -51,6 +51,8 @@
 #elif defined(_SAM3XA_)
   #include <UARTClass.h>  // Arduino Due
   #define SERIAL_CLASS UARTClass
+#elif defined(ARDUINO_SAMD_ZERO) // Arduino Zero
+  #define SERIAL_CLASS Serial_
 #elif defined(USE_USBCON)
   // Arduino Leonardo USB Serial Port
   #define SERIAL_CLASS Serial_
@@ -74,7 +76,9 @@ class ArduinoHardware {
     }
     ArduinoHardware()
     {
-#if defined(USBCON) and !(defined(USE_USBCON))
+#if defined(ARDUINO_SAMD_ZERO)
+      iostream = &SerialUSB;
+#elif defined(USBCON) and !(defined(USE_USBCON))
       /* Leonardo support */
       iostream = &Serial1;
 #elif defined(USE_TEENSY_HW_SERIAL) or defined(USE_STM32_HW_SERIAL)
@@ -111,7 +115,7 @@ class ArduinoHardware {
 
     unsigned long time(){return millis();}
     unsigned long long time_micros() {
-      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
             "Size of unsigned long long is not equal to uint64_t.");
         static_assert(sizeof(unsigned long) == sizeof(uint32_t),
