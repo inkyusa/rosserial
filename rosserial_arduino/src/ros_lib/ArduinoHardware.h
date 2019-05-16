@@ -41,7 +41,7 @@
   #include <WProgram.h>  // Arduino 0022
 #endif
 
-#if defined(__MK20DX128__) || defined(__MK20DX256__)
+#if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__MKL26Z64__)
   #if defined(USE_TEENSY_HW_SERIAL)
     #define SERIAL_CLASS HardwareSerial // Teensy HW Serial
   #else
@@ -51,34 +51,45 @@
 #elif defined(_SAM3XA_)
   #include <UARTClass.h>  // Arduino Due
   #define SERIAL_CLASS UARTClass
+#elif defined(ARDUINO_SAMD_ZERO) // Arduino Zero
+  #define SERIAL_CLASS Serial_
 #elif defined(USE_USBCON)
   // Arduino Leonardo USB Serial Port
   #define SERIAL_CLASS Serial_
+#elif (defined(__STM32F1__) and !(defined(USE_STM32_HW_SERIAL))) or defined(SPARK) 
+  // Stm32duino Maple mini USB Serial Port
+  #define SERIAL_CLASS USBSerial
 #else 
   #include <HardwareSerial.h>  // Arduino AVR
   #define SERIAL_CLASS HardwareSerial
 #endif
+
+#include <util/atomic.h>
 
 class ArduinoHardware {
   public:
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
       iostream = io;
       baud_ = baud;
+      mus_now_ = 0ULL;
+      mus_prev_ = 0UL;
     }
     ArduinoHardware()
     {
-#if defined(USBCON) and !(defined(USE_USBCON))
+#if defined(ARDUINO_SAMD_ZERO)
+      iostream = &SerialUSB;
+#elif defined(USBCON) and !(defined(USE_USBCON))
       /* Leonardo support */
       iostream = &Serial1;
-#elif defined(USE_TEENSY_HW_SERIAL)
+#elif defined(USE_TEENSY_HW_SERIAL) or defined(USE_STM32_HW_SERIAL)
       iostream = &Serial1;
 #else
       iostream = &Serial;
 #endif
-      baud_ = 57600;
+      baud_ = 250000;
     }
     ArduinoHardware(ArduinoHardware& h){
-      this->iostream = iostream;
+      this->iostream = h.iostream;
       this->baud_ = h.baud_;
     }
   
@@ -103,10 +114,26 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
+    unsigned long long time_micros() {
+     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
+            "Size of unsigned long long is not equal to uint64_t.");
+        static_assert(sizeof(unsigned long) == sizeof(uint32_t),
+            "Size of unsigned long is not equal to uint32_t.");
+      uint32_t mus = micros();
+        uint32_t mus_delta = mus - mus_prev_;
+        mus_now_ += mus_delta;
+        mus_prev_ = mus;
+      }
+      return mus_now_;
+    }
 
   protected:
     SERIAL_CLASS* iostream;
     long baud_;
+  private:
+    uint64_t mus_now_;
+    uint32_t mus_prev_;
 };
 
 #endif

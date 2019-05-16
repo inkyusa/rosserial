@@ -2,6 +2,54 @@
 Changelog for package rosserial_client
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.7 (2017-11-29)
+------------------
+* Add overall spin timeout to rosserial read. (`#334 <https://github.com/ros-drivers/rosserial/issues/334>`_)
+* Fixing formatting on files. (`#333 <https://github.com/ros-drivers/rosserial/issues/333>`_)
+* Fix catkin lint errors (`#296 <https://github.com/ros-drivers/rosserial/issues/296>`_)
+* fix spinOnce timeout : 5ms -> 5s (`#326 <https://github.com/ros-drivers/rosserial/issues/326>`_)
+* [Client] Fix a warning in comparison. (`#323 <https://github.com/ros-drivers/rosserial/issues/323>`_)
+* Use const in ros namespace instead of #define for constants. Fix `#283 <https://github.com/ros-drivers/rosserial/issues/283>`_ (`#318 <https://github.com/ros-drivers/rosserial/issues/318>`_)
+* Fix CMP0046 warnings in catkin-built firmwares (`#320 <https://github.com/ros-drivers/rosserial/issues/320>`_)
+* Prevent time variable overflow leading to parameter timeout error (`#293 <https://github.com/ros-drivers/rosserial/issues/293>`_)
+* Add class member method callback support for Service Server. (`#282 <https://github.com/ros-drivers/rosserial/issues/282>`_)
+* Added capability to specify timeout in getParam methods (`#278 <https://github.com/ros-drivers/rosserial/issues/278>`_)
+* Contributors: 1r0b1n0, Alessandro Francescon, Bei Chen Liu, David Portugal, Dmitry Kargin, Mike O'Driscoll, Mike Purvis, Romain Reignier
+
+0.7.6 (2017-03-01)
+------------------
+* Fixing message has no attribute _md5sum (`#257 <https://github.com/ros-drivers/rosserial/issues/257>`_)
+* Contributors: Mike O'Driscoll
+
+0.7.5 (2016-11-22)
+------------------
+* rosserial client variable typedefs (`#254 <https://github.com/ros-drivers/rosserial/issues/254>`_)
+  * Add typedefs to generated messages
+  This brings rosserial message headers in line with
+  roscpp headers that provide a typedef for the message
+  variable member.
+  * Removing unused imports and variables.
+* Added functions for endian-agnostic memory copying (`#240 <https://github.com/ros-drivers/rosserial/issues/240>`_)
+* Contributors: Mike O'Driscoll, ivan
+
+0.7.4 (2016-09-21)
+------------------
+* Integration tests for rosserial (`#243 <https://github.com/ros-drivers/rosserial/issues/243>`_)
+* Support member functions as subscriber callbacks.
+* Contributors: Mike O'Driscoll, Mike Purvis
+
+0.7.3 (2016-08-05)
+------------------
+* Order packages by alpha rather than topologically. (`#234 <https://github.com/ros-drivers/rosserial/issues/234>`_)
+* Contributors: Mike Purvis
+
+0.7.2 (2016-07-15)
+------------------
+* Add ros.h include to transform_broadcaster
+* Add environment variable for arduino location
+* Supported 32bit array lengths in python make_libraries script
+* Contributors: Alan Meekins, David Lavoie-Boutin
+
 0.7.1 (2015-07-06)
 ------------------
 * Provide option to pass through CMake arguments in the CMAKE_COMMAND

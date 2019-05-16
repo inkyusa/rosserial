@@ -2,6 +2,35 @@
 Changelog for package rosserial_python
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.7 (2017-11-29)
+------------------
+* Fix catkin lint errors (`#296 <https://github.com/ros-drivers/rosserial/issues/296>`_)
+* pyserial bug workaround to fix rosserial_test test against SerialClient.py (`#313 <https://github.com/ros-drivers/rosserial/issues/313>`_)
+* Add requestTopics to correct publish before setup (`#308 <https://github.com/ros-drivers/rosserial/issues/308>`_)
+* Contributors: Bei Chen Liu, Tom O'Connell
+
+0.7.6 (2017-03-01)
+------------------
+* Fix typo in serial error message (`#253 <https://github.com/ros-drivers/rosserial/issues/253>`_)
+* Contributors: Jonathan Binney
+
+0.7.5 (2016-11-22)
+------------------
+
+0.7.4 (2016-09-21)
+------------------
+* Try to read more serial bytes in a loop (`#248 <https://github.com/ros-drivers/rosserial/issues/248>`_)
+* Add missing "import errno" to rosserial_python
+* Integration tests for rosserial (`#243 <https://github.com/ros-drivers/rosserial/issues/243>`_)
+* rosserial_python tcp server allowing socket address reuse (`#242 <https://github.com/ros-drivers/rosserial/issues/242>`_)
+* Contributors: Mike Purvis, Vitor Matos, davidshin172
+
+0.7.3 (2016-08-05)
+------------------
+
+0.7.2 (2016-07-15)
+------------------
+
 0.7.1 (2015-07-06)
 ------------------
 
