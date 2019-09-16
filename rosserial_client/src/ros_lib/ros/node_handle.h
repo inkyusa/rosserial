@@ -47,12 +47,12 @@
 namespace ros {
 
 class NodeHandleBase_ {
- public:
-  virtual int publish(int id, const Msg* msg) = 0;
+public:
+  virtual int publish(int id, const Msg *msg) = 0;
   virtual int spinOnce() = 0;
   virtual bool connected() = 0;
 };
-}
+} // namespace ros
 
 #include "ros/publisher.h"
 #include "ros/service_client.h"
@@ -76,20 +76,20 @@ const uint8_t MODE_FIRST_FF = 0;
  * this file and in rosserial_python/src/rosserial_python/SerialClient.py
  */
 const uint8_t MODE_PROTOCOL_VER = 1;
-const uint8_t PROTOCOL_VER1 = 0xff;  // through groovy
-const uint8_t PROTOCOL_VER2 = 0xfe;  // in hydro
+const uint8_t PROTOCOL_VER1 = 0xff; // through groovy
+const uint8_t PROTOCOL_VER2 = 0xfe; // in hydro
 const uint8_t PROTOCOL_VER = PROTOCOL_VER2;
 const uint8_t MODE_SIZE_L = 2;
 const uint8_t MODE_SIZE_H = 3;
 const uint8_t MODE_SIZE_CHECKSUM =
-    4;  // checksum for msg size received from size L and H
-const uint8_t MODE_TOPIC_L = 5;  // waiting for topic id
+    4; // checksum for msg size received from size L and H
+const uint8_t MODE_TOPIC_L = 5; // waiting for topic id
 const uint8_t MODE_TOPIC_H = 6;
 const uint8_t MODE_MESSAGE = 7;
-const uint8_t MODE_MSG_CHECKSUM = 8;  // checksum for msg and topic id
+const uint8_t MODE_MSG_CHECKSUM = 8; // checksum for msg and topic id
 
 const uint8_t SERIAL_MSG_TIMEOUT =
-    20;  // 20 milliseconds to recieve all of message data
+    20; // 20 milliseconds to recieve all of message data
 
 using rosserial_msgs::TopicInfo;
 
@@ -97,7 +97,7 @@ using rosserial_msgs::TopicInfo;
 template <class Hardware, int MAX_SUBSCRIBERS = 25, int MAX_PUBLISHERS = 25,
           int INPUT_SIZE = 512, int OUTPUT_SIZE = 512>
 class NodeHandle_ : public NodeHandleBase_ {
- protected:
+protected:
   Hardware hardware_;
 
   /* time used for syncing */
@@ -109,8 +109,8 @@ class NodeHandle_ : public NodeHandleBase_ {
   double clock_offset_s;
   double clock_skew;
   double dt;
-  double P11, P12, P21, P22;  // P matrix
-  double K1, K2;              // Kalman Gain
+  double P11, P12, P21, P22; // P matrix
+  double K1, K2;             // Kalman Gain
   bool clock_initialized;
   bool request_sync;
   bool sync_time;
@@ -121,25 +121,27 @@ class NodeHandle_ : public NodeHandleBase_ {
   uint8_t message_in[INPUT_SIZE];
   uint8_t message_out[OUTPUT_SIZE];
 
-  Publisher* publishers[MAX_PUBLISHERS];
-  Subscriber_* subscribers[MAX_SUBSCRIBERS];
+  Publisher *publishers[MAX_PUBLISHERS];
+  Subscriber_ *subscribers[MAX_SUBSCRIBERS];
 
   /*
    * Setup Functions
    */
- public:
+public:
   NodeHandle_()
-      : configured_(false),
-        clock_initialized(false),
-        request_sync(false),
+      : configured_(false), clock_initialized(false), request_sync(false),
         sync_time(false) {
-    for (unsigned int i = 0; i < MAX_PUBLISHERS; i++) publishers[i] = 0;
+    for (unsigned int i = 0; i < MAX_PUBLISHERS; i++)
+      publishers[i] = 0;
 
-    for (unsigned int i = 0; i < MAX_SUBSCRIBERS; i++) subscribers[i] = 0;
+    for (unsigned int i = 0; i < MAX_SUBSCRIBERS; i++)
+      subscribers[i] = 0;
 
-    for (unsigned int i = 0; i < INPUT_SIZE; i++) message_in[i] = 0;
+    for (unsigned int i = 0; i < INPUT_SIZE; i++)
+      message_in[i] = 0;
 
-    for (unsigned int i = 0; i < OUTPUT_SIZE; i++) message_out[i] = 0;
+    for (unsigned int i = 0; i < OUTPUT_SIZE; i++)
+      message_out[i] = 0;
 
     req_param_resp.ints_length = 0;
     req_param_resp.ints = NULL;
@@ -151,7 +153,7 @@ class NodeHandle_ : public NodeHandleBase_ {
     spin_timeout_ = 0;
   }
 
-  Hardware* getHardware() { return &hardware_; }
+  Hardware *getHardware() { return &hardware_; }
 
   /* Start serial, initialize buffers */
   void initNode() {
@@ -163,7 +165,7 @@ class NodeHandle_ : public NodeHandleBase_ {
   };
 
   /* Start a named port, which may be network server IP, initialize buffers */
-  void initNode(char* portName) {
+  void initNode(char *portName) {
     hardware_.init(portName);
     mode_ = 0;
     bytes_ = 0;
@@ -179,9 +181,9 @@ class NodeHandle_ : public NodeHandleBase_ {
    * SPIN_TIMEOUT is returned from spinOnce().
    * @param timeout The timeout in milliseconds that spinOnce will function.
    */
-  void setSpinTimeout(const uint32_t& timeout) { spin_timeout_ = timeout; }
+  void setSpinTimeout(const uint32_t &timeout) { spin_timeout_ = timeout; }
 
- protected:
+protected:
   // State machine variables for spinOnce
   int mode_;
   int bytes_;
@@ -197,7 +199,7 @@ class NodeHandle_ : public NodeHandleBase_ {
   uint32_t last_sync_receive_time;
   uint32_t last_msg_timeout_time;
 
- public:
+public:
   /* This function goes in your loop() function, it handles
    *  serial input and callbacks for subscribers.
    */
@@ -231,7 +233,8 @@ class NodeHandle_ : public NodeHandleBase_ {
         }
       }
       int data = hardware_.read();
-      if (data < 0) break;
+      if (data < 0)
+        break;
       checksum_ += data;
       if (mode_ == MODE_MESSAGE) /* message data being recieved */
       {
@@ -255,7 +258,7 @@ class NodeHandle_ : public NodeHandleBase_ {
           mode_ = MODE_FIRST_FF;
           if (configured_ == false)
             requestSyncTime(); /* send a msg back showing our protocol version
-                                  */
+                                */
         }
       } else if (mode_ == MODE_SIZE_L) /* bottom half of message size */
       {
@@ -281,7 +284,8 @@ class NodeHandle_ : public NodeHandleBase_ {
       {
         topic_ += data << 8;
         mode_ = MODE_MESSAGE;
-        if (bytes_ == 0) mode_ = MODE_MSG_CHECKSUM;
+        if (bytes_ == 0)
+          mode_ = MODE_MSG_CHECKSUM;
       } else if (mode_ == MODE_MSG_CHECKSUM) /* do checksum */
       {
         mode_ = MODE_FIRST_FF;
@@ -307,7 +311,8 @@ class NodeHandle_ : public NodeHandleBase_ {
     }
 
     /* occasionally sync time (5 times as often as SYNC_SECONDS)*/
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.2 * 1000))) {
+    if (configured_ &&
+        ((c_time - last_sync_time) > (SYNC_SECONDS * 0.2 * 1000))) {
       requestSyncTime();
       last_sync_time = c_time;
     }
@@ -329,7 +334,7 @@ class NodeHandle_ : public NodeHandleBase_ {
     client_time_mus = hardware_.time_micros();
   }
 
-  void syncTime(uint8_t* data) {
+  void syncTime(uint8_t *data) {
     std_msgs::Time t;
     // Time offset between request of timesync and recieved host time.
     uint64_t offset_mus = hardware_.time_micros() - client_time_mus;
@@ -358,13 +363,13 @@ class NodeHandle_ : public NodeHandleBase_ {
                          client_time_mus) /
                             1000000.0 -
                         clock_offset_s;
-      if (abs(residual) < 5.0) { 
+      if (abs(residual) < 5.0) {
         // Only do the update if the residual is withing certain limits.
         clock_offset_s += K1 * residual;
         clock_skew += K2 * residual;
 
-        double lmK1H1 = 1.0 - K1;  // 1 - K1 * H1
-        
+        double lmK1H1 = 1.0 - K1; // 1 - K1 * H1
+
         P21 = -P11 * K2 + P21;
         P22 = -P12 * K2 + P22;
         P11 = P11 * lmK1H1;
@@ -383,6 +388,7 @@ class NodeHandle_ : public NodeHandleBase_ {
       clock_initialized = true;
     }
     last_sync_receive_time = hardware_.time();
+    last_sync_time_mus = hardware_.time_micros();
   }
 
   Time now() {
@@ -390,9 +396,9 @@ class NodeHandle_ : public NodeHandleBase_ {
     uint64_t mus_corrected =
         mus + initial_clock_offset_mus +
         (int64_t)((clock_offset_s +
-                    clock_skew *
-                        ((long double)(mus - last_sync_time_mus) / 1000000.0)) *
-                   1000000.0);
+                   clock_skew *
+                       ((long double)(mus - last_sync_time_mus) / 1000000.0)) *
+                  1000000.0);
     Time current_time;
     current_time.sec = mus_corrected / 1000000ULL;
     current_time.nsec = (mus_corrected % 1000000ULL) * 1000ULL;
@@ -405,9 +411,9 @@ class NodeHandle_ : public NodeHandleBase_ {
    */
 
   /* Register a new publisher */
-  bool advertise(Publisher& p) {
+  bool advertise(Publisher &p) {
     for (int i = 0; i < MAX_PUBLISHERS; i++) {
-      if (publishers[i] == 0)  // empty slot
+      if (publishers[i] == 0) // empty slot
       {
         publishers[i] = &p;
         p.id_ = i + 100 + MAX_SUBSCRIBERS;
@@ -419,12 +425,11 @@ class NodeHandle_ : public NodeHandleBase_ {
   }
 
   /* Register a new subscriber */
-  template <typename SubscriberT>
-  bool subscribe(SubscriberT& s) {
+  template <typename SubscriberT> bool subscribe(SubscriberT &s) {
     for (int i = 0; i < MAX_SUBSCRIBERS; i++) {
-      if (subscribers[i] == 0)  // empty slot
+      if (subscribers[i] == 0) // empty slot
       {
-        subscribers[i] = static_cast<Subscriber_*>(&s);
+        subscribers[i] = static_cast<Subscriber_ *>(&s);
         s.id_ = i + 100;
         return true;
       }
@@ -434,12 +439,12 @@ class NodeHandle_ : public NodeHandleBase_ {
 
   /* Register a new Service Server */
   template <typename MReq, typename MRes, typename ObjT>
-  bool advertiseService(ServiceServer<MReq, MRes, ObjT>& srv) {
+  bool advertiseService(ServiceServer<MReq, MRes, ObjT> &srv) {
     bool v = advertise(srv.pub);
     for (int i = 0; i < MAX_SUBSCRIBERS; i++) {
-      if (subscribers[i] == 0)  // empty slot
+      if (subscribers[i] == 0) // empty slot
       {
-        subscribers[i] = static_cast<Subscriber_*>(&srv);
+        subscribers[i] = static_cast<Subscriber_ *>(&srv);
         srv.id_ = i + 100;
         return v;
       }
@@ -449,12 +454,12 @@ class NodeHandle_ : public NodeHandleBase_ {
 
   /* Register a new Service Client */
   template <typename MReq, typename MRes>
-  bool serviceClient(ServiceClient<MReq, MRes>& srv) {
+  bool serviceClient(ServiceClient<MReq, MRes> &srv) {
     bool v = advertise(srv.pub);
     for (int i = 0; i < MAX_SUBSCRIBERS; i++) {
-      if (subscribers[i] == 0)  // empty slot
+      if (subscribers[i] == 0) // empty slot
       {
-        subscribers[i] = static_cast<Subscriber_*>(&srv);
+        subscribers[i] = static_cast<Subscriber_ *>(&srv);
         srv.id_ = i + 100;
         return v;
       }
@@ -466,23 +471,23 @@ class NodeHandle_ : public NodeHandleBase_ {
     rosserial_msgs::TopicInfo ti;
     int i;
     for (i = 0; i < MAX_PUBLISHERS; i++) {
-      if (publishers[i] != 0)  // non-empty slot
+      if (publishers[i] != 0) // non-empty slot
       {
         ti.topic_id = publishers[i]->id_;
-        ti.topic_name = (char*)publishers[i]->topic_;
-        ti.message_type = (char*)publishers[i]->msg_->getType();
-        ti.md5sum = (char*)publishers[i]->msg_->getMD5();
+        ti.topic_name = (char *)publishers[i]->topic_;
+        ti.message_type = (char *)publishers[i]->msg_->getType();
+        ti.md5sum = (char *)publishers[i]->msg_->getMD5();
         ti.buffer_size = OUTPUT_SIZE;
         publish(publishers[i]->getEndpointType(), &ti);
       }
     }
     for (i = 0; i < MAX_SUBSCRIBERS; i++) {
-      if (subscribers[i] != 0)  // non-empty slot
+      if (subscribers[i] != 0) // non-empty slot
       {
         ti.topic_id = subscribers[i]->id_;
-        ti.topic_name = (char*)subscribers[i]->topic_;
-        ti.message_type = (char*)subscribers[i]->getMsgType();
-        ti.md5sum = (char*)subscribers[i]->getMsgMD5();
+        ti.topic_name = (char *)subscribers[i]->topic_;
+        ti.message_type = (char *)subscribers[i]->getMsgType();
+        ti.md5sum = (char *)subscribers[i]->getMsgMD5();
         ti.buffer_size = INPUT_SIZE;
         publish(subscribers[i]->getEndpointType(), &ti);
       }
@@ -490,8 +495,9 @@ class NodeHandle_ : public NodeHandleBase_ {
     configured_ = true;
   }
 
-  virtual int publish(int id, const Msg* msg) {
-    if (id >= 100 && !configured_) return 0;
+  virtual int publish(int id, const Msg *msg) {
+    if (id >= 100 && !configured_)
+      return 0;
 
     /* serialize message */
     int l = msg->serialize(message_out + 7);
@@ -507,7 +513,8 @@ class NodeHandle_ : public NodeHandleBase_ {
 
     /* calculate checksum */
     int chk = 0;
-    for (int i = 5; i < l + 7; i++) chk += message_out[i];
+    for (int i = 5; i < l + 7; i++)
+      chk += message_out[i];
     l += 7;
     message_out[l++] = 255 - (chk % 256);
 
@@ -524,33 +531,33 @@ class NodeHandle_ : public NodeHandleBase_ {
    * Logging
    */
 
- private:
-  void log(char byte, const char* msg) {
+private:
+  void log(char byte, const char *msg) {
     rosserial_msgs::Log l;
     l.level = byte;
-    l.msg = (char*)msg;
+    l.msg = (char *)msg;
     publish(rosserial_msgs::TopicInfo::ID_LOG, &l);
   }
 
- public:
-  void logdebug(const char* msg) { log(rosserial_msgs::Log::ROSDEBUG, msg); }
-  void loginfo(const char* msg) { log(rosserial_msgs::Log::INFO, msg); }
-  void logwarn(const char* msg) { log(rosserial_msgs::Log::WARN, msg); }
-  void logerror(const char* msg) { log(rosserial_msgs::Log::ERROR, msg); }
-  void logfatal(const char* msg) { log(rosserial_msgs::Log::FATAL, msg); }
+public:
+  void logdebug(const char *msg) { log(rosserial_msgs::Log::ROSDEBUG, msg); }
+  void loginfo(const char *msg) { log(rosserial_msgs::Log::INFO, msg); }
+  void logwarn(const char *msg) { log(rosserial_msgs::Log::WARN, msg); }
+  void logerror(const char *msg) { log(rosserial_msgs::Log::ERROR, msg); }
+  void logfatal(const char *msg) { log(rosserial_msgs::Log::FATAL, msg); }
 
   /********************************************************************
    * Parameters
    */
 
- private:
+private:
   bool param_recieved;
   rosserial_msgs::RequestParamResponse req_param_resp;
 
-  bool requestParam(const char* name, int time_out = 1000) {
+  bool requestParam(const char *name, int time_out = 1000) {
     param_recieved = false;
     rosserial_msgs::RequestParamRequest req;
-    req.name = (char*)name;
+    req.name = (char *)name;
     publish(TopicInfo::ID_PARAMETER_REQUEST, &req);
     uint32_t end_time = hardware_.time() + time_out;
     while (!param_recieved) {
@@ -563,13 +570,14 @@ class NodeHandle_ : public NodeHandleBase_ {
     return true;
   }
 
- public:
-  bool getParam(const char* name, int* param, int length = 1,
+public:
+  bool getParam(const char *name, int *param, int length = 1,
                 int timeout = 1000) {
     if (requestParam(name, timeout)) {
       if (length == req_param_resp.ints_length) {
         // copy it over
-        for (int i = 0; i < length; i++) param[i] = req_param_resp.ints[i];
+        for (int i = 0; i < length; i++)
+          param[i] = req_param_resp.ints[i];
         return true;
       } else {
         logwarn("Failed to get param: length mismatch");
@@ -577,12 +585,13 @@ class NodeHandle_ : public NodeHandleBase_ {
     }
     return false;
   }
-  bool getParam(const char* name, float* param, int length = 1,
+  bool getParam(const char *name, float *param, int length = 1,
                 int timeout = 1000) {
     if (requestParam(name, timeout)) {
       if (length == req_param_resp.floats_length) {
         // copy it over
-        for (int i = 0; i < length; i++) param[i] = req_param_resp.floats[i];
+        for (int i = 0; i < length; i++)
+          param[i] = req_param_resp.floats[i];
         return true;
       } else {
         logwarn("Failed to get param: length mismatch");
@@ -590,7 +599,7 @@ class NodeHandle_ : public NodeHandleBase_ {
     }
     return false;
   }
-  bool getParam(const char* name, char** param, int length = 1,
+  bool getParam(const char *name, char **param, int length = 1,
                 int timeout = 1000) {
     if (requestParam(name, timeout)) {
       if (length == req_param_resp.strings_length) {
@@ -604,25 +613,21 @@ class NodeHandle_ : public NodeHandleBase_ {
     }
     return false;
   }
-  bool getParam(const char* name, bool* param, int length = 1, int timeout = 1000)
-  {
-    if (requestParam(name, timeout))
-    {
-      if (length == req_param_resp.ints_length)
-      {
-        //copy it over
+  bool getParam(const char *name, bool *param, int length = 1,
+                int timeout = 1000) {
+    if (requestParam(name, timeout)) {
+      if (length == req_param_resp.ints_length) {
+        // copy it over
         for (int i = 0; i < length; i++)
           param[i] = req_param_resp.ints[i];
         return true;
-      }
-      else
-      {
+      } else {
         logwarn("Failed to get param: length mismatch");
       }
     }
     return false;
   }
 };
-}
+} // namespace ros
 
 #endif
