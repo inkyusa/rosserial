@@ -108,12 +108,18 @@ protected:
   uint64_t initial_clock_offset_mus;
   double clock_offset_s;
   double clock_skew;
+  double residual;
   double dt;
   double P11, P12, P21, P22; // P matrix
   double K1, K2;             // Kalman Gain
   bool clock_initialized;
   bool request_sync;
   bool sync_time;
+  const double Q_offset; // Covariance of determining dt.
+  const double Q_skew;   // Covariance of determining dt.
+  const double R;        // Measuring uncertainty.
+  bool new_ekf_available;
+  double innovation_offset, innovation_skew;
 
   /* Spinonce maximum work timeout */
   uint32_t spin_timeout_;
@@ -130,7 +136,8 @@ protected:
 public:
   NodeHandle_()
       : configured_(false), clock_initialized(false), request_sync(false),
-        sync_time(false) {
+        sync_time(false), new_ekf_available(false), Q_offset(1.0e-5),
+        Q_skew(8.0e-10), R(5.0e-3) {
     for (unsigned int i = 0; i < MAX_PUBLISHERS; i++)
       publishers[i] = 0;
 
@@ -349,24 +356,26 @@ public:
       // Prediction.
       clock_offset_s = clock_offset_s + dt * clock_skew;
       clock_skew = clock_skew;
-      P11 = P11 + dt * P21 + (P12 + dt * P22) * dt;
+      P11 = P11 + dt * P21 + (P12 + dt * P22) * dt + Q_offset;
       P12 = P12 + dt * P22;
       P21 = P21 + dt * P22;
-      P22 = P22 + dt * 1.0e-11;
+      P22 = P22 + Q_skew; //+ dt * 1.0e-11; // 1.0e-11;
 
       // Update.
-      double S_inv = 1.0 / (P11 + 1.0e-6);
-
-      K1 = P11 * S_inv;
-      K2 = P21 * S_inv;
-      double residual = ((double)(host_time_mus - initial_clock_offset_mus) -
-                         client_time_mus) /
-                            1000000.0 -
-                        clock_offset_s;
-      if (abs(residual) < 5.0) {
+      residual = ((double)(host_time_mus - initial_clock_offset_mus) -
+                  client_time_mus) /
+                     1000000.0 -
+                 clock_offset_s;
+      if (abs(residual) < 0.5) {
         // Only do the update if the residual is withing certain limits.
+        double S_inv = 1.0 / (P11 + R);
+        K1 = P11 * S_inv;
+        K2 = P21 * S_inv;
+
         clock_offset_s += K1 * residual;
         clock_skew += K2 * residual;
+        innovation_offset = K1 * residual;
+        innovation_skew = K2 * residual;
 
         double lmK1H1 = 1.0 - K1; // 1 - K1 * H1
 
@@ -378,17 +387,18 @@ public:
     } else {
       // Init state.
       initial_clock_offset_mus = host_time_mus - client_time_mus;
-      clock_offset_s = 0.0;
-      clock_skew = 0.0;
-      P11 = 4.0e-6;
+      clock_offset_s = 0.6;
+      clock_skew = -0.0003;
+      P11 = 1.0e-5; // Initial offset sigma^2.
       P12 = 0.0;
       P21 = 0.0;
-      P22 = 1.0e-11;
+      P22 = 1.0e-15; // Initial skew sigma^2.
 
       clock_initialized = true;
     }
     last_sync_receive_time = hardware_.time();
     last_sync_time_mus = hardware_.time_micros();
+    new_ekf_available = true;
   }
 
   Time now() {
@@ -406,6 +416,13 @@ public:
     return current_time;
   }
 
+  double getResidual() { return residual; }
+  double getOffset() { return clock_offset_s; }
+  double getSkew() { return clock_skew; }
+  double getInnovationOffset() { return innovation_offset; }
+  double getInnovationSkew() { return innovation_skew; }
+  bool isNewEkfAvailable() { return new_ekf_available; }
+  void newEkfIsNotAvailable() { new_ekf_available = false; }
   /********************************************************************
    * Topic Management
    */
