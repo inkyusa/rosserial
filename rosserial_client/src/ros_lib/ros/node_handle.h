@@ -359,7 +359,7 @@ public:
       P11 = P11 + dt * P21 + (P12 + dt * P22) * dt + Q_offset;
       P12 = P12 + dt * P22;
       P21 = P21 + dt * P22;
-      P22 = P22 + Q_skew; //+ dt * 1.0e-11; // 1.0e-11;
+      P22 = P22 + Q_skew;
 
       // Update.
       residual = ((double)(host_time_mus - initial_clock_offset_mus) -
